@@ -1,0 +1,48 @@
+import yfinance as yf
+import pandas as pd
+import openpyxl
+import numpy as np
+import statsmodels.api as sm
+import matplotlib.pyplot as plt
+
+df = pd.read_csv('C:/Users/makk9/Desktop/Stock/Modified Tickers/Other sectors/monthly_other_sectors_returns.csv')
+
+columns_to_roll = ['PPI_Change', 'Hwage_Change', 'Electricity_Change', 'CPI_Change', 'Oil_Change']
+roll_lag_combinations = [(1, 1), (1, 2), (3, 1), (3, 2), (6, 1), (6, 2), (12, 1), (12, 2)]
+
+# Create the new cumulative columns with different roll and lag combinations
+for roll, lag in roll_lag_combinations:
+    for col in columns_to_roll:
+        # Calculate the cumulative sum with the given rolling window size
+        df[f'Cumulative_{col}_roll{roll}_lag{lag}'] = df[col].rolling(window=roll).sum()
+        # Apply the lag (shift by the specified lag value)
+        df[f'Cumulative_{col}_roll{roll}_lag{lag}_lagged'] = df[f'Cumulative_{col}_roll{roll}_lag{lag}'].shift(lag)
+
+df.fillna(0, inplace=True)
+
+fig, axes = plt.subplots(len(columns_to_roll) * len(roll_lag_combinations), 2, figsize=(14, len(columns_to_roll) * len(roll_lag_combinations) * 6))
+
+row = 0  # To keep track of which row to plot in the subplot grid
+for roll, lag in roll_lag_combinations:
+    for col in columns_to_roll:
+        # Get the lagged cumulative variable for the regression
+        X = df[f'Cumulative_{col}_roll{roll}_lag{lag}_lagged']
+        X = sm.add_constant(X)  # Add constant (intercept)
+        y = df['Sector Return']
+        
+        model = sm.OLS(y, X).fit()
+
+        axes[row, 0].scatter(X.iloc[:, 1], y, color='blue', label='Data')
+        axes[row, 0].plot(X.iloc[:, 1], model.fittedvalues, color='red', label='Fitted Line')
+        axes[row, 0].set_title(f'Regression: {col} (Roll {roll}, Lag {lag}) vs Sector Return')
+        axes[row, 0].set_xlabel(f'Cumulative {col} (Roll {roll}, Lag {lag})')
+        axes[row, 0].set_ylabel('Sector Return')
+        axes[row, 0].legend()
+        
+        axes[row, 1].text(0.1, 0.5, model.summary().as_text(), fontsize=12, ha='left', va='center')
+        axes[row, 1].axis('off')  # Turn off axis for the text
+
+        row += 1  # Move to the next row in the subplot grid
+
+plt.tight_layout()
+plt.show()
